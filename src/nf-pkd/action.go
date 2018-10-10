@@ -1,0 +1,174 @@
+/*
+  action.go contains most of the action/rule related stuff
+
+  Copyright Eric Estabrooks 2018
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along
+    with this program; if not, write to the Free Software Foundation, Inc.,
+    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+*/
+
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"time"
+
+	"knock"
+
+	"github.com/google/gopacket"
+)
+
+type ActiveCache struct {
+	cache map[gopacket.Endpoint]time.Time
+}
+
+func NewActiveCache() (ac *ActiveCache) {
+	ac = &ActiveCache{}
+	ac.cache = make(map[gopacket.Endpoint]time.Time)
+	return
+}
+
+func (ac *ActiveCache) Update(src gopacket.Endpoint, until time.Time) {
+	fmt.Printf("src: %v allowed until %v\n", src, until)
+	ac.cache[src] = until
+}
+
+func (ac *ActiveCache) Check(src gopacket.Endpoint, now time.Time) (valid bool) {
+	if until, ok := ac.cache[src]; ok {
+		//fmt.Println(until, now, src) debug output
+		valid = until.After(now)
+		if !valid {
+			delete(ac.cache, src)
+		}
+	}
+	return
+}
+
+type Action struct {
+	Name      string
+	Key       knock.Key     `json:"-"`
+	KeyStr    string        `json:"key"`
+	Skew      int64         // clock skew allowance
+	Window    time.Duration // seconds to open port for new connections
+	Related   time.Duration // seconds to hold port open for established,related connections
+	Tag       knock.Tag     `json:"-"`
+	TagStr    string        `json:"tag"`
+	Reset     bool          // reset (true) or drop (false) connection on failed check
+	Port      uint16
+	Protocol  string
+	ExtAction string
+	ExtUser   string
+	OBO       bool
+	connect   *ActiveCache
+	related   *ActiveCache
+}
+
+func (action Action) CheckWindow(src gopacket.Endpoint, now time.Time) (passed bool) {
+	passed = action.connect.Check(src, now)
+	return
+}
+
+func (action Action) CheckRelated(src gopacket.Endpoint, now time.Time) (passed bool) {
+	if action.Related == 0 || action.related.Check(src, now) {
+		passed = true
+	}
+	return
+}
+
+func (action Action) Allowed(src gopacket.Endpoint) {
+	action.connect.Update(src, time.Now().Add(action.Window))
+	if action.Related != 0 {
+		action.related.Update(src, time.Now().Add(action.Related))
+	}
+}
+
+type PortMap map[uint16]Action
+type TagMap map[knock.Tag]Action
+type ActionList []Action
+
+func load_actions(top string) (actions TagMap, ports PortMap, err error) {
+	var files []string
+
+	actions = make(TagMap)
+	ports = make(PortMap)
+
+	err = filepath.Walk(top, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".json" {
+			return nil
+		}
+		files = append(files, path)
+		return nil
+	})
+
+	if err != nil {
+		fmt.Printf("failed to walk directory: %s -- %s\n", top, err)
+		return
+	}
+
+	for _, file := range files {
+		var action_list ActionList
+		var action_bytes []byte
+
+		action_bytes, err = ioutil.ReadFile(file)
+		if err != nil {
+			fmt.Printf("failed to load: %s -- %s\n", file, err)
+			return
+		}
+		err = json.Unmarshal(action_bytes, &action_list)
+		if err != nil {
+			fmt.Printf("failed to unmarshal: %s -- %s\n", file, err)
+			// maybe don't return if want it to come up with what it can
+			return
+		}
+
+		for _, action := range action_list {
+			action.Tag, err = knock.KString(action.TagStr).Tag()
+			if err != nil {
+				fmt.Printf("failed to convert tag: %v -- %s\n", action, err)
+				return
+			}
+			action.Key, err = knock.KString(action.KeyStr).Key()
+			if err != nil {
+				fmt.Printf("failed to convert key: %v -- %s\n", action, err)
+				return
+			}
+			// set default skew
+			if action.Skew == 0 || action.Skew < -1 {
+				action.Skew = 10
+			}
+			// convert given times into durations
+			action.Window = time.Duration(action.Window * time.Second)
+			action.Related = time.Duration(action.Related * time.Second)
+
+			// initialize caches
+			action.connect = NewActiveCache()
+			action.related = NewActiveCache()
+
+			actions[action.Tag] = action
+			ports[action.Port] = action
+			//fmt.Printf("adding %v\n", action) debug output
+		}
+	}
+
+	return
+}
