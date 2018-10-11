@@ -151,6 +151,8 @@ iptables -A INPUT -p udp -j NFQUEUE --queue-num 0
 
 *Note: The makefiles set their own GOPATH so it shouldn't matter where you unpack this code.*
 
+Apparently you need golang version 1.9 at least to build this successfully.  ubuntu has a couple of options [golang-go](https://github.com/golang/go/wiki/Ubuntu).  I verified that the snap one works fine.  It might build in as low as 1.7 but it looks like runtime.KeepAlive had some issues in earlier versions.
+
 ## Installing
 Currently nothing exciting, just copy the nf-pkd and nf-pkd-knock executables to whereever.  It should be noted that nf-pkd needs to run as root or have cap_net_admin capability set on it's executable.  Eventually I'll add deb and rpm recipes to make installable packages.
 
