@@ -22,9 +22,9 @@ package knock
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
-	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -69,15 +69,31 @@ func (k Knock) SendTo(port uint16) (err error) {
 	return
 }
 
+func GenerateUint16() (val uint16, err error) {
+	var rb [2]byte
+	_, err = rand.Read(rb[:])
+	if err != nil {
+		return
+	}
+	val = binary.LittleEndian.Uint16(rb[0:])
+	return
+}
+
 func (k Knock) Send() (err error) {
 	if k.port == 0 {
-		k.port = uint16(rand.Uint32()%65534) + 1
+		k.port, err = GenerateUint16()
+		if err != nil {
+			return
+		}
+		k.port = (k.port % 65534) + 1
 	}
+
 	var rand_bytes [12]byte
-	for x := 0; x < 3; x++ {
-		spot := x * 4
-		binary.LittleEndian.PutUint32(rand_bytes[spot:spot+4], rand.Uint32())
+	_, err = rand.Read(rand_bytes[:])
+	if err != nil {
+		return
 	}
+
 	now := uint64(time.Now().Unix())
 	packet := k.packet(now, rand_bytes)
 
@@ -120,12 +136,6 @@ func (ks KString) Key() (key Key, err error) {
 		copy(key[:], key_bytes)
 	}
 	return
-}
-
-// http://cavaliercoder.com/blog/optimized-abs-for-int64-in-go.html
-func abs(n int64) int64 {
-	y := n >> 63
-	return (n ^ y) - y
 }
 
 // check validity of packet and return the packet's internal timestamp
