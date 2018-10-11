@@ -34,7 +34,7 @@ nf-pkd actions are configured via json files.  They each contain a list of dicts
 They should only be readable by root or the user that is running nf-pkd.
 
 *Note: currently it only supports one action/rule per tag/port because of how it is mapped*
-```json
+```
 [
  {
   'name': <name>,
@@ -96,7 +96,7 @@ iptables -A INPUT -p tcp --dport 22 -m state --state NEW -j NFQUEUE --queue-num 
 ip6tables -A INPUT -p tcp --dport 22 -m state --state NEW -j NFQUEUE --queue-num 0
 ```
 *nf-pkd rule file* -- actions.d/port22.json
-```json
+```
 [{'name': 'port22', 'port': 22, 'protocol': 'tcp', 'tag': 'SSHK', 'key': test, 'window': 60, 'skew': 10}]
 ```
 
@@ -110,7 +110,7 @@ iptables -A INPUT -p udp --dport 22 -j NFQUEUE --queue-num 0
 iptables -A INPUT -p tcp --dport 22 -m state --state NEW -j NFQUEUE --queue-num 0
 ```
 *nf-pkd rule file* -- actions.d/knock_port22.json
-```json
+```
 [{'name': 'knock_port22', 'port': 22, 'protocol': 'tcp', 'tag': 'SSHK', 'key': test, 'window': 60}]
 ```
 Knocking for this one would be something like:
@@ -130,7 +130,7 @@ iptables -A INPUT -p tcp --dport 22 -j NFQUEUE --queue-num 0
 *'related' is the duration in seconds that the established,related ssh packets are allowed to flow*
 
 *nf-pkd rule file* -- actions.d/port22_limited.json
-```json
+```
 [{'name': 'port22_limited', 'port': 22, 'protocol': 'tcp', 'tag': 'SSHK', 'key': 'test', 'window': 60, 'related': 300}]
 ```
 
