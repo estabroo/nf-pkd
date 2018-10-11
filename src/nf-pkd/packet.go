@@ -30,6 +30,12 @@ import (
 	"github.com/google/gopacket/layers"
 )
 
+type Sig [32]byte
+type SigMap map[Sig]bool
+
+//TODO: make this expire, this is totally ddos/dos'able as it is perm stored at the moment
+var played SigMap
+
 // http://cavaliercoder.com/blog/optimized-abs-for-int64-in-go.html
 func abs(n int64) int64 {
 	y := n >> 63
@@ -42,6 +48,7 @@ func send_icmp_unreachable(src, dst gopacket.Endpoint, sport, dport uint16) {
 
 func handle_packet(packet netfilter.NFPacket, by_tag TagMap, by_port PortMap) (verdict netfilter.Verdict) {
 	var tag knock.Tag
+	var sig Sig
 	verdict = netfilter.NF_ACCEPT
 	now := time.Now()
 
@@ -60,6 +67,13 @@ func handle_packet(packet netfilter.NFPacket, by_tag TagMap, by_port PortMap) (v
 		}
 		k := knock.Knock{Tag: action.Tag, Key: action.Key}
 		if knock_time, ok := k.Check(payload, port); ok {
+			copy(sig[:], payload[24:])
+			if _, ok := played[sig]; ok {
+				// TODO: add a fail2ban like thing here to prevent dos
+				fmt.Printf("replayed knock from %v for %s\n", src, action.Name)
+				return // skip replays
+			}
+			played[sig] = true
 			epoch_seconds := now.Unix()
 			skew := abs(epoch_seconds - knock_time)
 			if action.Skew == -1 || skew < action.Skew {

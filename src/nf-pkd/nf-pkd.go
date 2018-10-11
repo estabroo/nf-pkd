@@ -46,6 +46,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// initialize global played
+	played = make(SigMap)
+
 	nfq, err := netfilter.NewNFQueue(queue, 100, netfilter.NF_DEFAULT_PACKET_SIZE)
 	if err != nil {
 		fmt.Println(err)
