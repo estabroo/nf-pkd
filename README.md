@@ -8,7 +8,7 @@ nf-pkd-knock is the knock generator/sender
 
 Just fire it up!
 
-Okay maybe not that easy but darn close.  In either order you can add, via netfilter or iptables, nfqueue rules to send data to the queue number you choose for nf-pkd to listen on and fire up nf-pkd.  It should be noted that any packets hitting the queue rules will be stalled if there is no listener for the queue, at least that is what it seemed like to me.
+Okay maybe not that easy but darn close.  In either order you can add, via netfilter or iptables, nfqueue rules to send data to the queue number you choose for nf-pkd to listen on and fire up nf-pkd.  It should be noted that any packets hitting the queue rules will be stalled if there is no listener for the queue, at least that is what it seemed like to me. *Turns out that is true, but you can add --queue-bypass and they'll pass to the next rule if there is no queue listener.*
 
 Oh and you need a couple of rules telling it what to block.  Currently they are called actions but I really am thinking of changing that to rules, apologies ahead of time when/if that breaks someones setup in the future.
 
@@ -104,10 +104,10 @@ ip6tables -A INPUT -p tcp --dport 22 -m state --state NEW -j NFQUEUE --queue-num
 *constraining the knock ports can improve performance on machines that have other udp traffic (voip server).
 It's also useful for reducing ports open on your firewall*
 
-*add nf-pkd queue to a chain, use port 22 for knocking as well as ssh*
+*add nf-pkd queue to a chain, use port 22 for knocking as well as ssh, bypass if no queue listener*
 ```
-iptables -A INPUT -p udp --dport 22 -j NFQUEUE --queue-num 0
-iptables -A INPUT -p tcp --dport 22 -m state --state NEW -j NFQUEUE --queue-num 0
+iptables -A INPUT -p udp --dport 22 -j NFQUEUE --queue-num 0 --queue-bypass
+iptables -A INPUT -p tcp --dport 22 -m state --state NEW -j NFQUEUE --queue-num 0 --queue-bypass
 ```
 *nf-pkd rule file* -- actions.d/knock_port22.json
 ```
