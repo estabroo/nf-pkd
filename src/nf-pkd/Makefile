@@ -1,7 +1,7 @@
 GOPATH := ${CURDIR}/../../
 export GOPATH
 
-SRC := nf-pkd.go action.go packet.go ../knock/knock.go
+SRC := nf-pkd.go action.go flow.go packet.go ../knock/knock.go
 
 all: nf-pkd
 
@@ -14,7 +14,7 @@ Gopkg.toml: ${SRC}
 nf-pkd: vendor Gopkg.toml ${SRC}
 	gofmt -l *.go
 	go vet
-	go build nf-pkd.go action.go packet.go
+	go build
 
 test:
 	go test

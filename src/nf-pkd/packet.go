@@ -36,6 +36,21 @@ type SigMap map[Sig]bool
 //TODO: make this expire, this is totally ddos/dos'able as it is perm stored at the moment
 var played SigMap
 
+type Ticket struct {
+	src  gopacket.Endpoint
+	port uint16
+}
+
+/*
+func (t *Ticket) Key() TicketKey {
+	return TicketKey{t.src, t.port}
+}
+*/
+
+type TicketMap map[Ticket]bool
+
+var tickets TicketMap = make(TicketMap)
+
 // http://cavaliercoder.com/blog/optimized-abs-for-int64-in-go.html
 func abs(n int64) int64 {
 	y := n >> 63
@@ -46,77 +61,70 @@ func abs(n int64) int64 {
 func send_icmp_unreachable(src, dst gopacket.Endpoint, sport, dport uint16) {
 }
 
-func handle_packet(packet netfilter.NFPacket, by_tag TagMap, by_port PortMap) (verdict netfilter.Verdict) {
-	var tag knock.Tag
-	var sig Sig
+// global so we don't have to create/destroy a bunch of things to just check
+var sig Sig
+var knock_check knock.Knock
+var tag knock.Tag
+
+func handle_udp_packet(udp *layers.UDP, flow Flow, by_tag TagMap) (verdict netfilter.Verdict) {
 	verdict = netfilter.NF_ACCEPT
+	payload := udp.LayerPayload()
+	copy(tag[:], payload)
+	action, ok := by_tag[tag]
+	if !ok {
+		return // no actions have this tag
+	}
 	now := time.Now()
-
-	flow := packet.Packet.NetworkLayer().NetworkFlow()
-	src, dst := flow.Endpoints()
-
-	// if it's a udp packet check if it's a knock - make a separate function?
-	if udp_layer := packet.Packet.Layer(layers.LayerTypeUDP); udp_layer != nil {
-		udp, _ := udp_layer.(*layers.UDP)
-		port := uint16(udp.DstPort)
-		payload := udp.LayerPayload()
-		copy(tag[:], payload)
-		action, ok := by_tag[tag]
-		if !ok {
-			return // no actions have this tag
+	knock_check.Tag = action.Tag
+	knock_check.Key = action.Key
+	if knock_time, ok := knock_check.Check(payload, action.Port); ok {
+		copy(sig[:], payload[24:])
+		if _, ok := played[sig]; ok {
+			// TODO: add a fail2ban like thing here to prevent dos
+			fmt.Printf("replayed knock %v for %s\n", flow, action.Name)
+			return // skip replays
 		}
-		k := knock.Knock{Tag: action.Tag, Key: action.Key}
-		if knock_time, ok := k.Check(payload, port); ok {
-			copy(sig[:], payload[24:])
-			if _, ok := played[sig]; ok {
-				// TODO: add a fail2ban like thing here to prevent dos
-				fmt.Printf("replayed knock from %v for %s\n", src, action.Name)
-				return // skip replays
-			}
-			played[sig] = true
-			epoch_seconds := now.Unix()
-			skew := abs(epoch_seconds - knock_time)
-			if action.Skew == -1 || skew < action.Skew {
-				fmt.Printf("knock from %v for %s\n", src, action.Name)
-				action.Allowed(src)
-			} else {
-				fmt.Printf("%v knock for %s outside of time window\n", src, action.Name)
-			}
-			verdict = netfilter.NF_STOP // we handled it, no other processing needed
-		}
-		return
-	} else if tcp_layer := packet.Packet.Layer(layers.LayerTypeTCP); tcp_layer != nil {
-		tcp, _ := tcp_layer.(*layers.TCP)
-		port := uint16(tcp.DstPort)
-
-		/* TODO: support multiple actions on a port? */
-		action, ok := by_port[port]
-		if !ok { // no actions for this port
-			return
-		}
-		// ignore action if it isn't for tcp
-		if action.Protocol != "" && action.Protocol != "tcp" {
-			return
-		}
-		// is it a new connection
-		if tcp.SYN {
-			if !action.CheckWindow(src, now) {
-				// TODO: add option to icmp reject
-				verdict = netfilter.NF_DROP
-				send_icmp_unreachable(src, dst, uint16(tcp.SrcPort), uint16(tcp.DstPort) /*, payload */)
-				fmt.Printf("rule %s new connection denied %v access to port %d\n", action.Name, src, int(port))
-			}
+		src, _ := flow.nf.Endpoints()
+		played[sig] = true
+		epoch_seconds := now.Unix()
+		skew := abs(epoch_seconds - knock_time)
+		if action.Skew == -1 || skew < action.Skew {
+			fmt.Printf("knock %v for %s\n", flow, action.Name)
+			//ticket := Ticket{src, action.Port, time.Now().Add(action.window * time.Second)}
+			//tickets[ticket.Key()] = ticket
+			ticket := Ticket{src, action.Port}
+			tickets[ticket] = true
+			//action.Allowed(src)
 		} else {
-			if !action.CheckRelated(src, now) {
-				if action.Reset {
-					verdict = netfilter.NF_DROP
-					send_icmp_unreachable(src, dst, uint16(tcp.SrcPort), uint16(tcp.DstPort) /*, payload */)
-				} else {
-					verdict = netfilter.NF_DROP
-				}
-				fmt.Printf("rule %s established/related connection denied %v access to port %d\n", action.Name, src, int(port))
-			}
+			fmt.Printf("%v knock for %s outside of time window\n", src, action.Name)
 		}
+		verdict = netfilter.NF_STOP // we handled it, no other processing needed
+	}
+	return
+}
+
+var ticket Ticket
+
+func handle_tcp_packet(tcp *layers.TCP, flow Flow, by_port PortMap) (verdict netfilter.Verdict) {
+	verdict = netfilter.NF_ACCEPT
+	port := uint16(tcp.DstPort)
+	src, _ := flow.nf.Endpoints()
+	ticket.src = src
+	ticket.port = port
+	if _, ok := tickets[ticket]; ok {
+		delete(tickets, ticket)
+		flows[flow] = true
+		return
+	}
+	verdict = netfilter.NF_DROP
+	if action, ok := by_port[port]; ok {
+		if action.Reset {
+			// TODO: add option to icmp reject check via port, proto?
+			//send_icmp_unreachable(src, dst, uint16(tcp.SrcPort), uint16(tcp.DstPort) /*, payload */)
+		}
+		fmt.Printf("rule %s new connection denied %v access to port %d\n", action.Name, src, int(port))
+	} else {
+		fmt.Printf("no ticket or rule: new connection denied %v access to port %d\n", src, int(port))
 	}
 	return
 }

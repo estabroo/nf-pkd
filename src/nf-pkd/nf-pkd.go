@@ -22,13 +22,18 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/estabroo/go-netfilter-queue"
 	"os"
+
+	"github.com/estabroo/go-netfilter-queue"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 )
 
 func main() {
 	var err error
 	var queue uint16
+	var udp *layers.UDP
+	var tcp *layers.TCP
 
 	path := flag.String("actions", "/etc/nf-pkd/actions.d", "directory where actions are located")
 	queue_flag := flag.Uint("queue", 0, "netfilter queue to listen on, range 0-65535 (default 0)")
@@ -49,7 +54,7 @@ func main() {
 	// initialize global played
 	played = make(SigMap)
 
-	nfq, err := netfilter.NewNFQueue(queue, 100, netfilter.NF_DEFAULT_PACKET_SIZE)
+	nfq, err := netfilter.NewNFQueue(queue, 120, netfilter.NF_DEFAULT_PACKET_SIZE)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -57,10 +62,45 @@ func main() {
 	defer nfq.Close()
 	packet_chan := nfq.GetPackets()
 
+	var network_flow gopacket.Flow
+	var transport_flow gopacket.Flow
+	var transport_layer gopacket.TransportLayer
+	var layer_type gopacket.LayerType
+	var flow Flow
+
 	for {
 		select {
 		case packet := <-packet_chan:
-			packet.SetVerdict(handle_packet(packet, actions, ports))
+			network_flow = packet.Packet.NetworkLayer().NetworkFlow()
+			transport_layer = packet.Packet.TransportLayer()
+			transport_flow = transport_layer.TransportFlow()
+			layer_type = transport_layer.LayerType()
+			flow = Flow{nf: network_flow, tf: transport_flow, lt: layer_type}
+
+			switch layer_type {
+			case layers.LayerTypeUDP:
+				udp, _ = transport_layer.(*layers.UDP)
+				packet.SetVerdict(handle_udp_packet(udp, flow, actions))
+
+			case layers.LayerTypeTCP:
+				tcp, _ = transport_layer.(*layers.TCP)
+				if tcp.SYN {
+					packet.SetVerdict(handle_tcp_packet(tcp, flow, ports))
+				} else {
+					if _, ok := flows[flow]; ok {
+						packet.SetVerdict(netfilter.NF_ACCEPT)
+						if tcp.FIN || tcp.RST {
+							// fmt.Printf("removing flow: %#v", flow)
+							delete(flows, flow)
+						}
+					} else {
+						packet.SetVerdict(netfilter.NF_DROP)
+					}
+				}
+
+			default:
+				packet.SetVerdict(netfilter.NF_ACCEPT)
+			}
 		}
 	}
 }
