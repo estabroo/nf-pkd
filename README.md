@@ -54,10 +54,6 @@ They should only be readable by root or the user that is running nf-pkd.
       Amount of time to allow new connections (tcp) or allow packets in general (udp)
       when this rule has been successfully knocked.
 
-  'related': <time-in-seconds>,
-      Number of seconds to allow related packets to pass after a connection is established for tcp.
-      default is 0 - no time limit
-
   'tag': <tag>,
       Sets the tag for this knock key.  Use different tags for
       different keys on the same machine.  This speeds up processing
@@ -116,23 +112,6 @@ iptables -A INPUT -p tcp --dport 22 -m state --state NEW -j NFQUEUE --queue-num 
 Knocking for this one would be something like:
 
  `nf-pkd-knock -tag SSHK -key test -port 22 --host localhost`
-
-###### Block ipv4 ssh and limit length of an ssh session to 5 minutes
-*add nf-pkd queue to a chain*
-```
-iptables -A INPUT -p udp -j NFQUEUE --queue-num 0
-```
-*Note the lack of --state in this one, forcing all ssh packets through nf-pkd*
-```
-iptables -A INPUT -p tcp --dport 22 -j NFQUEUE --queue-num 0
-```
-
-*'related' is the duration in seconds that the established,related ssh packets are allowed to flow*
-
-*nf-pkd rule file* -- actions.d/port22_limited.json
-```
-[{'name': 'port22_limited', 'port': 22, 'protocol': 'tcp', 'tag': 'SSHK', 'key': 'test', 'window': 60, 'related': 300}]
-```
 
 
 ###### This example totally doesn't work because the code isn't in place yet
