@@ -28,35 +28,7 @@ import (
 	"time"
 
 	"knock"
-
-	"github.com/google/gopacket"
 )
-
-type ActiveCache struct {
-	cache map[gopacket.Endpoint]time.Time
-}
-
-func NewActiveCache() (ac *ActiveCache) {
-	ac = &ActiveCache{}
-	ac.cache = make(map[gopacket.Endpoint]time.Time)
-	return
-}
-
-func (ac *ActiveCache) Update(src gopacket.Endpoint, until time.Time) {
-	fmt.Printf("src: %v allowed until %v\n", src, until)
-	ac.cache[src] = until
-}
-
-func (ac *ActiveCache) Check(src gopacket.Endpoint, now time.Time) (valid bool) {
-	if until, ok := ac.cache[src]; ok {
-		//fmt.Println(until, now, src) debug output
-		valid = until.After(now)
-		if !valid {
-			delete(ac.cache, src)
-		}
-	}
-	return
-}
 
 type Action struct {
 	Name      string
@@ -64,7 +36,6 @@ type Action struct {
 	KeyStr    string        `json:"key"`
 	Skew      int64         // clock skew allowance
 	Window    time.Duration // seconds to open port for new connections
-	Related   time.Duration // seconds to hold port open for established,related connections
 	Tag       knock.Tag     `json:"-"`
 	TagStr    string        `json:"tag"`
 	Reset     bool          // reset (true) or drop (false) connection on failed check
@@ -73,27 +44,6 @@ type Action struct {
 	ExtAction string
 	ExtUser   string
 	OBO       bool
-	connect   *ActiveCache
-	related   *ActiveCache
-}
-
-func (action Action) CheckWindow(src gopacket.Endpoint, now time.Time) (passed bool) {
-	passed = action.connect.Check(src, now)
-	return
-}
-
-func (action Action) CheckRelated(src gopacket.Endpoint, now time.Time) (passed bool) {
-	if action.Related == 0 || action.related.Check(src, now) {
-		passed = true
-	}
-	return
-}
-
-func (action Action) Allowed(src gopacket.Endpoint) {
-	action.connect.Update(src, time.Now().Add(action.Window))
-	if action.Related != 0 {
-		action.related.Update(src, time.Now().Add(action.Related))
-	}
 }
 
 type PortMap map[uint16]Action
@@ -156,13 +106,9 @@ func load_actions(top string) (actions TagMap, ports PortMap, err error) {
 			if action.Skew == 0 || action.Skew < -1 {
 				action.Skew = 10
 			}
-			// convert given times into durations
-			action.Window = time.Duration(action.Window * time.Second)
-			action.Related = time.Duration(action.Related * time.Second)
 
-			// initialize caches
-			action.connect = NewActiveCache()
-			action.related = NewActiveCache()
+			// convert given times into durations in seconds
+			action.Window = time.Duration(action.Window * time.Second)
 
 			actions[action.Tag] = action
 			ports[action.Port] = action
