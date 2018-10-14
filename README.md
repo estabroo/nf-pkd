@@ -1,6 +1,6 @@
 # nf-pkd and friends
 
-nf-pkd is a port knock detector with spa (single packet authorization).  I've tried to keep it compatible with iptr\_pkd while extending it's functionality. So any of the 1.0 and later ipt\_pkd knock clients should work with nf-pkd.
+nf-pkd is a port knock detector with spa (single packet authorization).  I've tried to keep it compatible with ipt\_pkd while extending it's functionality. So any of the 1.0 and later ipt\_pkd knock clients should work with nf-pkd.
 
 nf-pkd-knock is the knock generator/sender
 
@@ -156,6 +156,7 @@ It is compatible with [pkd](https://github.com/estabroo/pkd) 1.x and later
 * nf-pkd will eventually have more features like OBO (knocking for someone else) and triggering commands
 
 ### ToDo
+- [] make the leaky bucket rate limit settable per action/rule
 - [] option to send icmp unreachable instead of just dropping the packet
 - [] allow multiple actions per port, both tag and what
 - [] triggers (that's the ext-command, ext-user stuff) to run stuff on an incoming knock
@@ -168,7 +169,7 @@ It is compatible with [pkd](https://github.com/estabroo/pkd) 1.x and later
 - [] Get real logging, currently just dumps stuff to stdout
 - [] fix the make oddity that sometimes requires you to call make twice after change - missing dependency?
 
-###### This uses what now (other dependencies)
+##### This uses what now (other dependencies)
 * my fork of go-filter-queue [go-netfilter-queue](https://github.com/AkihiroSuda/go-netfilter-queue)
 * golang.org/x/crypto [crypto](https://godoc.org/golang.org/x/crypto)
 * golang.org/x/sys [sys](https://godoc.org/golang.org/x/sys)
