@@ -30,6 +30,31 @@ import (
 	"knock"
 )
 
+type LeakyBucket struct {
+	last_fill time.Time
+	size int
+	fill int
+	left int
+	delay time.Duration
+}
+
+func (b *LeakyBucket) Check(now time.Time) (valid bool) {
+	if now.Sub(b.last_fill) > b.delay {
+		fmt.Printf("bucket refilling %v %v %v\n", now, b.last_fill, b.delay)
+		b.left += b.fill
+		if b.left > b.size {
+			b.left = b.size
+		}
+		b.last_fill = now
+	}
+	b.left -= 1
+	valid = b.left >= 0
+	if !valid {
+		b.left = 0
+	}
+	return
+}
+
 type Action struct {
 	Name      string
 	Key       knock.Key     `json:"-"`
@@ -44,6 +69,7 @@ type Action struct {
 	ExtAction string
 	ExtUser   string
 	OBO       bool
+	bucket    *LeakyBucket
 }
 
 type PortMap map[uint16]Action
@@ -106,6 +132,9 @@ func load_actions(top string) (actions TagMap, ports PortMap, err error) {
 			if action.Skew == 0 || action.Skew < -1 {
 				action.Skew = 10
 			}
+
+			// set up leaky bucket
+			action.bucket = &LeakyBucket{size: 1, fill: 1, delay: 5 * time.Second}
 
 			// convert given times into durations in seconds
 			action.Window = time.Duration(action.Window * time.Second)

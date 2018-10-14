@@ -72,6 +72,7 @@ func handle_udp_packet(udp *layers.UDP, flow Flow, by_tag TagMap) (verdict netfi
 	copy(tag[:], payload)
 	action, ok := by_tag[tag]
 	if !ok {
+		// TODO: check the flow/ticket? - for example if you wanted to protect a sip port
 		return // no actions have this tag
 	}
 	now := time.Now()
@@ -80,9 +81,14 @@ func handle_udp_packet(udp *layers.UDP, flow Flow, by_tag TagMap) (verdict netfi
 	if knock_time, ok := knock_check.Check(payload, action.Port); ok {
 		copy(sig[:], payload[24:])
 		if _, ok := played[sig]; ok {
-			// TODO: add a fail2ban like thing here to prevent dos
 			fmt.Printf("replayed knock %v for %s\n", flow, action.Name)
 			return // skip replays
+		}
+		// leaky bucket only allow N requests per M seconds per rule, default is 1 in 5
+		// in this implementation N is also the total bucket size
+		if !action.bucket.Check(now) {
+			fmt.Printf("knock %s denied by rate limit\n", action.Name)
+			return
 		}
 		src, _ := flow.nf.Endpoints()
 		played[sig] = true
@@ -94,7 +100,6 @@ func handle_udp_packet(udp *layers.UDP, flow Flow, by_tag TagMap) (verdict netfi
 			//tickets[ticket.Key()] = ticket
 			ticket := Ticket{src, action.Port}
 			tickets[ticket] = true
-			//action.Allowed(src)
 		} else {
 			fmt.Printf("%v knock for %s outside of time window\n", src, action.Name)
 		}
