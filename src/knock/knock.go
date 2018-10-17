@@ -21,8 +21,8 @@ package knock
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"net"
