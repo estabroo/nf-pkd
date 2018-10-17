@@ -5,7 +5,7 @@ ifndef VERSION
 	VERSION = beta
 endif
 
-SRC := nf-pkd.go action.go flow.go packet.go ../knock/knock.go
+SRC := $(wildcard *.go) ../knock/knock.go
 
 all: nf-pkd
 
@@ -18,7 +18,17 @@ Gopkg.toml: ${SRC}
 nf-pkd: vendor Gopkg.toml ${SRC}
 	gofmt -l *.go
 	go vet
+	go test
 	go build -ldflags "-X main.Version=$(VERSION)"
+
+clean:
+	rm coverage.out
 
 test:
 	go test
+
+coverage.out: ${SRC}
+	go test --cover --coverprofile=coverage.out
+
+coverage: coverage.out
+	go tool cover -html=coverage.out

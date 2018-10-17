@@ -39,9 +39,11 @@ type LeakyBucket struct {
 }
 
 func (b *LeakyBucket) Check(now time.Time) (valid bool) {
-	if now.Sub(b.last_fill) > b.delay {
-		fmt.Printf("bucket refilling %v %v %v\n", now, b.last_fill, b.delay)
-		b.left += b.fill
+	last_check := now.Sub(b.last_fill)
+	if last_check > b.delay {
+		fill := b.fill * int(last_check / b.delay)
+		//fmt.Printf("bucket refilling %v %v %v %v %v\n", now, b.last_fill, fill, b.delay, last_check)
+		b.left += fill
 		if b.left > b.size {
 			b.left = b.size
 		}
@@ -82,9 +84,10 @@ func load_actions(top string) (actions TagMap, ports PortMap, err error) {
 	actions = make(TagMap)
 	ports = make(PortMap)
 
-	err = filepath.Walk(top, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	err = filepath.Walk(top, func(path string, info os.FileInfo, ierr error) error {
+		if ierr != nil {
+			fmt.Println(ierr)
+			return ierr
 		}
 		if info.IsDir() {
 			return nil
