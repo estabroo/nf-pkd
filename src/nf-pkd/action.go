@@ -32,10 +32,10 @@ import (
 
 type LeakyBucket struct {
 	last_fill time.Time
-	size int
-	fill int
-	left int
-	delay time.Duration
+	size      int
+	fill      int
+	left      int
+	delay     time.Duration
 }
 
 func (b *LeakyBucket) Check(now time.Time) (valid bool) {
