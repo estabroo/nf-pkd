@@ -2,5 +2,6 @@ pkg
 bin
 vendor
 Gopkg.*
+coverage.out
 src/nf-pkd/nf-pkd
 src/nf-pkd-knock/nf-pkd-knock
