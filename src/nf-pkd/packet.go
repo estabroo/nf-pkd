@@ -67,18 +67,19 @@ var knock_check knock.Knock
 var tag knock.Tag
 
 func handle_udp_packet(udp *layers.UDP, flow Flow, by_tag TagMap) (verdict netfilter.Verdict) {
-	verdict = netfilter.NF_ACCEPT
+	verdict = netfilter.NF_DROP
 	payload := udp.LayerPayload()
 	copy(tag[:], payload)
 	action, ok := by_tag[tag]
 	if !ok {
 		// TODO: check the flow/ticket? - for example if you wanted to protect a sip port
+		verdict = netfilter.NF_ACCEPT
 		return // no actions have this tag
 	}
 	now := time.Now()
 	knock_check.Tag = action.Tag
 	knock_check.Key = action.Key
-	if knock_time, ok := knock_check.Check(payload, action.Port); ok {
+	if knock_time, ok := knock_check.Check(payload, uint16(udp.DstPort)); ok {
 		copy(sig[:], payload[24:])
 		if _, ok := played[sig]; ok {
 			fmt.Printf("replayed knock %v for %s\n", flow, action.Name)
@@ -103,7 +104,6 @@ func handle_udp_packet(udp *layers.UDP, flow Flow, by_tag TagMap) (verdict netfi
 		} else {
 			fmt.Printf("%v knock for %s outside of time window\n", src, action.Name)
 		}
-		verdict = netfilter.NF_STOP // we handled it, no other processing needed
 	}
 	return
 }
