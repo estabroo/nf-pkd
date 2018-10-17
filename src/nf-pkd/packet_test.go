@@ -113,3 +113,33 @@ func TestHandleUDPPacketGoodTagAndReplay(t *testing.T) {
 		t.Fatal("ticket was created", tickets)
 	}
 }
+
+func TestHandleTCPPacketAcceptAndDrop(t *testing.T) {
+	flow := Flow{}
+	by_port := make(PortMap)
+	action := Action{Port: 22, Name: "test-tcp"}
+	by_port[action.Port] = action
+	tcp := &layers.TCP{
+		SrcPort: layers.TCPPort(40000),
+		DstPort: layers.TCPPort(action.Port),
+	}
+	ticket := Ticket{port: action.Port}
+	tickets[ticket] = true
+
+	verdict := handle_tcp_packet(tcp, flow, by_port)
+	if verdict != netfilter.NF_ACCEPT {
+		t.Fatal("tcp connection wasn't allowed and should have been")
+	}
+	// ticket was used up so this one should be denied
+	verdict = handle_tcp_packet(tcp, flow, by_port)
+	if verdict != netfilter.NF_DROP {
+		t.Fatal("tcp connection was allowed and shouldn't have been")
+	}
+
+	// no ticket or action
+	by_port = make(PortMap)
+	verdict = handle_tcp_packet(tcp, flow, by_port)
+	if verdict != netfilter.NF_DROP {
+		t.Fatal("tcp connection was allowed and shouldn't have been")
+	}
+}
