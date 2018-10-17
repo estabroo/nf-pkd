@@ -41,7 +41,7 @@ type LeakyBucket struct {
 func (b *LeakyBucket) Check(now time.Time) (valid bool) {
 	last_check := now.Sub(b.last_fill)
 	if last_check > b.delay {
-		fill := b.fill * int(last_check / b.delay)
+		fill := b.fill * int(last_check/b.delay)
 		//fmt.Printf("bucket refilling %v %v %v %v %v\n", now, b.last_fill, fill, b.delay, last_check)
 		b.left += fill
 		if b.left > b.size {
@@ -72,6 +72,14 @@ type Action struct {
 	ExtUser   string
 	OBO       bool
 	bucket    *LeakyBucket
+}
+
+func NewAction(name string, tag knock.Tag, key knock.Key) (action Action) {
+	action.Name = name
+	action.Tag = tag
+	action.Key = key
+	action.bucket = &LeakyBucket{size: 1, fill: 1, left: 1, delay: 5 * time.Second}
+	return
 }
 
 type PortMap map[uint16]Action
