@@ -29,6 +29,8 @@ import (
 	"github.com/google/gopacket/layers"
 )
 
+var Version string
+
 func main() {
 	var err error
 	var queue uint16
@@ -37,7 +39,13 @@ func main() {
 
 	path := flag.String("actions", "/etc/nf-pkd/actions.d", "directory where actions are located")
 	queue_flag := flag.Uint("queue", 0, "netfilter queue to listen on, range 0-65535 (default 0)")
+	version := flag.Bool("v", false, "print version information")
 	flag.Parse()
+
+	if *version {
+		fmt.Printf("nf-pkd version %s\n", Version)
+		os.Exit(0)
+	}
 
 	if *queue_flag > 65535 {
 		fmt.Println("queue must be in the range 0 - 65535 inclusive")
