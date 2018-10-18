@@ -22,7 +22,7 @@ nf-pkd: vendor Gopkg.toml ${SRC}
 	go build -ldflags "-X main.Version=$(VERSION)"
 
 clean:
-	rm coverage.out
+	rm -f coverage.out nf-pkd
 
 test:
 	go test

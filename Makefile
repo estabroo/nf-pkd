@@ -1,5 +1,5 @@
-# make likes to have at least one real rule
-# this just runs the first rule in the sub-directory makefile
+RELEASE_VERSION := $(shell cat metadata/version)
+
 all:
 	cd src/nf-pkd && $(MAKE)
 	cp src/nf-pkd/nf-pkd bin
@@ -7,10 +7,14 @@ all:
 	cp src/nf-pkd-knock/nf-pkd-knock bin
 
 test:
+	cd src/knock && $(MAKE) test
 	cd src/nf-pkd && $(MAKE) test
-	cd src/nf-pkd-knock && $(MAKE) test
 
 clean:
-	rm bin/*
-	rm src/nf-pkd/nf-pkd
-	rm src/nf-pkd-knock/nf-pkd-knock
+	rm -f bin/*
+	cd src/nf-pkd && $(MAKE) clean
+	cd src/nf-pkd-knock && $(MAKE) clean
+	cd src/knock && $(MAKE) clean
+
+tag:
+	git tag -m"release version ${RELEASE_VERSION}" ${RELEASE_VERSION}

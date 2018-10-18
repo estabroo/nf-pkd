@@ -8,7 +8,7 @@ test:
 	go test
 
 clean:
-	rm coverage.out
+	rm -f coverage.out
 
 coverage.out: ${SRCS}
 	go test --cover --coverprofile=coverage.out

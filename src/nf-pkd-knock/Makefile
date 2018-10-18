@@ -18,3 +18,6 @@ nf-pkd-knock: vendor Gopkg.toml ${SRC}
 
 test:
 	go test
+
+clean:
+	rm -f coverage.out nf-pkd-knock
